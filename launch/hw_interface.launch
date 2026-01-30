@@ -1,0 +1,19 @@
+<?xml version="1.0" ?>
+<launch>
+        	<arg name="rviz_conf" default="$(find go2_description)/rviz/conf.rviz"/>
+	<arg name="spawn_x" default="0.0" />
+	<arg name="spawn_y" default="0.0" />
+	<arg name="spawn_z" default="2.0" />
+	<arg name="task_period" default="0.001" />
+	
+	<param name="task_period"  value="$(arg task_period)" />
+	
+	<!-- send hyq urdf to param server and spawn it -->
+	<include file="$(find go2_description)/launch/upload.launch">	</include>
+
+	<node name="robot_hardware_interface" pkg="go2_hardware_interface" type="ros_control_node" respawn="false" output="screen"/>
+
+
+
+</launch>
+

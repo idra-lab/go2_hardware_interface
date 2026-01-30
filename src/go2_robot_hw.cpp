@@ -58,18 +58,6 @@ void Go1RobotHw::init()
       WolfRobotHwInterface::initializeJointsInterface(joint_names);
       registerInterface(&joint_state_interface_);
       registerInterface(&joint_effort_interface_);
-      velocityFilterBuffer.resize(joint_names.size());
-      for (unsigned int i = 0; i < joint_names.size(); i++)
-    	{
-	       //init velocity filters
-	       velocityFilterBuffer[i][0] = 0.0;
-	       velocityFilterBuffer[i][1] = 0.0;
-	       velocityFilterBuffer[i][2] = 0.0;
-	       velocityFilterBuffer[i][3] = 0.0;
-	       velocityFilterBuffer[i][4] = 0.0;
-	       velocityFilterBuffer[i][5] = 0.0;
-	    }
-
     }
     else
     {
@@ -109,14 +97,16 @@ void Go1RobotHw::init()
       ROS_ERROR_NAMED(CLASS_NAME,"Failed to register imu interface.");
       return;
     }
-
+    //TODO
     go2_interface_.InitCmdData(go2_lowcmd_);
     startup_routine();
 
     ros::NodeHandle root_nh;
-    odom_pub_.reset(new realtime_tools::RealtimePublisher<nav_msgs::Odometry>(root_nh,	"/go2/ground_truth", 1));
-    imu_acc_pub_.reset(new realtime_tools::RealtimePublisher<geometry_msgs::Vector3>(root_nh,	"/go2/trunk_imu", 1));
-    imu_euler_pub_.reset(new realtime_tools::RealtimePublisher<geometry_msgs::Vector3>(root_nh,	"/go2/euler_imu", 1));
+    odom_pub_.reset(new realtime_tools::RealtimePublisher<nav_msgs::Odometry>(root_nh,	"/aliengo/ground_truth", 1));
+    imu_acc_pub_.reset(new realtime_tools::RealtimePublisher<geometry_msgs::Vector3>(root_nh,	"/aliengo/trunk_imu", 1));
+    imu_euler_pub_.reset(new realtime_tools::RealtimePublisher<geometry_msgs::Vector3>(root_nh,	"/aliengo/euler_imu", 1));
+    contact_state_pub_.reset(new realtime_tools::RealtimePublisher<std_msgs::Float64MultiArray>(root_nh,	"/aliengo/contact_force_z", 1));
+    imu_pub_ = std::make_shared<realtime_tools::RealtimePublisher<sensor_msgs::Imu>>(root_nh, "/aliengo/imu", 1);
 
 }
 
@@ -169,6 +159,7 @@ double b[3] = {1.3110644e-01 ,  2.6221288e-01,   1.3110644e-01};
 void Go1RobotHw::read()
 {
     // Get robot data
+      //TODO
     go2_state_ = go2_interface_.ReceiveObservation();
 
     // ------
@@ -177,10 +168,7 @@ void Go1RobotHw::read()
     for (unsigned int jj = 0; jj < n_dof_; ++jj)
     {
         joint_position_[jj] = static_cast<double>(go2_state_.motorState[go2_motor_idxs_[jj]].q)     ;
-
-	//filt(static_cast<double>(go2_state_.motorState[go2_motor_idxs_[jj]].dq) , velocityFilterBuffer[jj]);
         joint_velocity_[jj] = static_cast<double>(go2_state_.motorState[go2_motor_idxs_[jj]].dq) ;//velocityFilterBuffer[jj][0];
-
         joint_effort_[jj]   = static_cast<double>(go2_state_.motorState[go2_motor_idxs_[jj]].tauEst);
     }
 
@@ -225,6 +213,25 @@ void Go1RobotHw::read()
         imu_lin_acc_[0] = static_cast<double>(go2_state_.imu.accelerometer[0]);
         imu_lin_acc_[1] = static_cast<double>(go2_state_.imu.accelerometer[1]);
         imu_lin_acc_[2] = static_cast<double>(go2_state_.imu.accelerometer[2]);
+      
+
+        if(imu_pub_.get() && imu_pub_->trylock()){
+            imu_pub_->msg_.linear_acceleration.x = go2_state_.imu.accelerometer[0];
+            imu_pub_->msg_.linear_acceleration.y = go2_state_.imu.accelerometer[1];
+            imu_pub_->msg_.linear_acceleration.z = go2_state_.imu.accelerometer[2];
+
+            imu_pub_->msg_.angular_velocity.x = go2_state_.imu.gyroscope[0];
+            imu_pub_->msg_.angular_velocity.y = go2_state_.imu.gyroscope[1];
+            imu_pub_->msg_.angular_velocity.z = go2_state_.imu.gyroscope[2];
+
+            imu_pub_->msg_.orientation.w = go2_state_.imu.quaternion[0];
+            imu_pub_->msg_.orientation.x = go2_state_.imu.quaternion[1];
+            imu_pub_->msg_.orientation.y = go2_state_.imu.quaternion[2];
+            imu_pub_->msg_.orientation.z = go2_state_.imu.quaternion[3];
+
+            imu_pub_->msg_.header.stamp = ros::Time::now();
+            imu_pub_->unlockAndPublish();
+        }
 
 
         // Publish the IMU data NOTE: missing covariances
@@ -266,7 +273,7 @@ void Go1RobotHw::read()
 
 void Go1RobotHw::write()
 {
-
+  //TODO
     for (unsigned int jj = 0; jj < n_dof_; ++jj)
     {
       go2_lowcmd_.motorCmd[go2_motor_idxs_[jj]].mode = 0x0A;  // motor switch to servo (PMSM) mode
@@ -282,6 +289,7 @@ void Go1RobotHw::write()
 		go2_lowcmd_.levelFlag = unitree::LOWLEVEL;
 
     go2_interface_.SendLowCmd(go2_lowcmd_);
+      //TODO
 }
 
 void Go1RobotHw::send_zero_command()
@@ -289,6 +297,8 @@ void Go1RobotHw::send_zero_command()
     std::array<float, 60> zero_command = {0};
     // go2_interface_->SendCommand(zero_command);
     //IMPORTANT! this ensures all the Kp Kd gains are set to zero
+
+      //TODO
     go2_interface_.SendCommand(zero_command);
 }
 

@@ -48,5 +48,10 @@ set_property(TARGET ros_control_node PROPERTY CXX_STANDARD 11)  # At least std c
 install(
   TARGETS ros_control_node  test_go2_hal
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+  
+  
+install(DIRECTORY launch/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+  PATTERN ".svn" EXCLUDE)
 )
 
