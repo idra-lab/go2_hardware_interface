@@ -1,120 +1,93 @@
 #include "go2_hal/go2_hal.h"
 
-#include <iostream>
-#include <algorithm>
-
+#include <stdexcept>
 
 namespace go2hal
 {
 
-// ---------
-// Low-Level
-// ---------
-LowLevelInterface::LowLevelInterface(): safe_(unitree::LeggedType::Go2), udp_(unitree::LOWLEVEL, unitree::UDP_CLIENT_PORT, unitree::UDP_SERVER_IP_BASIC, unitree::UDP_SERVER_PORT)
-{
-    udp_.InitCmdData(lowcmd_);
+using namespace unitree::robot;
 
-    lowstate_.imu.quaternion[0] = 1.;
-    lowstate_.levelFlag = unitree::LOWLEVEL;
+LowLevelInterface::LowLevelInterface(const std::string& network_interface, int32_t domain_id)
+{
+  // ChannelFactory is a process-wide singleton; Init() must be called exactly
+  // once before any publisher/subscriber is created.
+  ChannelFactory::Instance()->Init(domain_id, network_interface);
+
+  InitCmdData(lowcmd_);
+
+  lowstate_.imu_state().quaternion()[0] = 1.f;
+  lowstate_.level_flag() = 0xFF; // LOWLEVEL
+
+  lowcmd_publisher_.reset(new ChannelPublisher<LowCmd>(TOPIC_LOWCMD));
+  lowcmd_publisher_->InitChannel();
+
+  lowstate_subscriber_.reset(new ChannelSubscriber<LowState>(TOPIC_LOWSTATE));
+  lowstate_subscriber_->InitChannel(
+      std::bind(&LowLevelInterface::LowStateMessageHandler, this, std::placeholders::_1), 1);
+}
+
+
+bool LowLevelInterface::HasState() const
+{
+  return state_received_.load(std::memory_order_relaxed);
+}
+
+void LowLevelInterface::LowStateMessageHandler(const void* message)
+{
+  std::lock_guard<std::mutex> lock(lowstate_mutex_);
+  lowstate_ = *static_cast<const LowState*>(message);
+  state_received_.store(true, std::memory_order_relaxed);
 }
 
 LowState LowLevelInterface::ReceiveObservation()
 {
-    udp_.Recv();
-    udp_.GetRecv(lowstate_);
-    return lowstate_;
+  std::lock_guard<std::mutex> lock(lowstate_mutex_);
+  return lowstate_;
 }
 
-void LowLevelInterface::InitCmdData(LowCmd& motorcmd) {
-    udp_.InitCmdData(motorcmd);
-}
-
-void LowLevelInterface::SendLowCmd(LowCmd& motorcmd)
+void LowLevelInterface::InitCmdData(LowCmd& cmd)
 {
-    // // TODO: Is it OK to force PMSM mode. Is it OK to do this operation here?
-    // motorcmd.levelFlag = unitree::LOWLEVEL;
-    // for (int motor_id = 0; motor_id < 12; ++motor_id)
-    // {
-    //   motorcmd.motorCmd[motor_id].mode = 0x0A; // Motor operation mode || 0x00: Electronic brake mode | 0x0A: Servo (PMSM) mode
-    //   // std::cout << motorcmd.motorCmd[motor_id].tau << '\n';
-    // }
-    // // std::cout << "***********" << std::endl;
+  cmd.head()[0] = 0xFE;
+  cmd.head()[1] = 0xEF;
+  cmd.level_flag() = 0xFF; // LOWLEVEL
+  cmd.gpio() = 0;
 
-    // Safety
-    safe_.PositionLimit(motorcmd);
-    // safe.PowerProtect(motorcmd, lowstate_, 1); // 3rd argument is the input factor:1~10. Means 10%~100% power limit. If you are new, then use 1; if you are familiar, then can try bigger number or even comment this function. */
-    safe_.PowerProtect(motorcmd, lowstate_, 10); // 3rd argument is the input factor:1~10. Means 10%~100% power limit. If you are new, then use 1; if you are familiar, then can try bigger number or even comment this function. */
-
-    // safe.PositionProtect(motorcmd, lowstate_, 0.087); // TODO: This throws an error. Define a better limit?. Default limit is 5 degree
-
-    // // // FORCE Motor mode
-    // // for (int motor_id = 0; motor_id < 12; motor_id++) {
-    // //   motorcmd.motorCmd[motor_id].mode = 0x0A; // Motor operation mode || 0x00: Electronic brake mode | 0x0A: Servo (PMSM) mode
-    // // }
-    //
-    // // FORCE Motor mode
-    // int motor_id = 8;
-    // motorcmd.motorCmd[motor_id].mode = 0x0A; // Motor operation mode || 0x00: Electronic brake mode | 0x0A: Servo (PMSM) mode
-    // motorcmd.motorCmd[motor_id].q = std::max<float>(-2.30, std::min<float>(motorcmd.motorCmd[motor_id].q, -1.20));  // Range: [-2.775, -0.611]
-    // motorcmd.motorCmd[motor_id].dq = std::max<float>(-8.00, std::min<float>(motorcmd.motorCmd[motor_id].dq, 8.00));
-    // motorcmd.motorCmd[motor_id].tau = std::max<float>(-0.50, std::min<float>(motorcmd.motorCmd[motor_id].tau, 25.00));
-
-    // Set command data
-    udp_.SetSend(motorcmd); // Unitree SDK
-
-    // Send UDP package to
-    udp_.Send();
+  for (auto& motor_cmd : cmd.motor_cmd())
+  {
+    motor_cmd.mode() = 0x0A; // motor switch to servo (PMSM) mode
+    motor_cmd.q()    = PosStopF;
+    motor_cmd.dq()   = VelStopF;
+    motor_cmd.kp()   = 0.f;
+    motor_cmd.kd()   = 0.f;
+    motor_cmd.tau()  = 0.f;
+  }
 }
 
-void LowLevelInterface::SendCommand(std::array<float, 60> motorcmd)
+void LowLevelInterface::SendLowCmd(LowCmd& cmd)
 {
-    lowcmd_.levelFlag = unitree::LOWLEVEL;
-    for (int motor_id = 0; motor_id < 12; ++motor_id)
-    {
-        lowcmd_.motorCmd[motor_id].q = motorcmd[motor_id*5];
-        lowcmd_.motorCmd[motor_id].dq = motorcmd[motor_id*5 + 1]; // NOTE: this order is different than google
-        lowcmd_.motorCmd[motor_id].Kp = motorcmd[motor_id*5 + 2]; // NOTE: this order is different than google
-        lowcmd_.motorCmd[motor_id].Kd = motorcmd[motor_id*5 + 3];
-        lowcmd_.motorCmd[motor_id].tau = motorcmd[motor_id*5 + 4];
-    }
-    LowLevelInterface::SendLowCmd(lowcmd_);
+  // TODO: port over safety checks equivalent to unitree_legged_sdk's
+  // Safety::PositionLimit() / PowerProtect() if/when needed; unitree_sdk2
+  // does not ship an equivalent helper, so any joint/power limiting must be
+  // implemented here or upstream in go2_robot_hw before calling SendLowCmd().
+
+  cmd.crc() = crc32_core(reinterpret_cast<uint32_t*>(&cmd), (sizeof(LowCmd) >> 2) - 1);
+  lowcmd_publisher_->Write(cmd);
 }
 
-
-// ----------
-// High-Level
-// ----------
-HighLevelInterface::HighLevelInterface(): safe_(unitree::LeggedType::Go2), udp_(unitree::LOWLEVEL, unitree::UDP_CLIENT_PORT, unitree::UDP_SERVER_IP_BASIC, unitree::UDP_SERVER_PORT)
+void LowLevelInterface::SendCommand(const std::array<float, 60>& motorcmd)
 {
+  lowcmd_.level_flag() = 0xFF; // LOWLEVEL
+  for (int motor_id = 0; motor_id < 12; ++motor_id)
+  {
+    auto& m = lowcmd_.motor_cmd()[motor_id];
+    m.mode() = 0x0A;
+    m.q()   = motorcmd[motor_id * 5 + 0];
+    m.dq()  = motorcmd[motor_id * 5 + 1];
+    m.kp()  = motorcmd[motor_id * 5 + 2];
+    m.kd()  = motorcmd[motor_id * 5 + 3];
+    m.tau() = motorcmd[motor_id * 5 + 4];
+  }
+  SendLowCmd(lowcmd_);
 }
-
-HighState HighLevelInterface::ReceiveObservation()
-{
-    udp_.Recv();
-    udp_.GetRecv(highstate_);
-    return highstate_;
-}
-
-void HighLevelInterface::SendHighCmd(HighCmd& descmd)
-{
-    // // TODO: Is it OK to force PMSM mode. Is it OK to do this operation here?
-    // motorcmd.levelFlag = unitree::LOWLEVEL;
-    // for (int motor_id = 0; motor_id < 12; motor_id++) {
-    //   motorcmd.motorCmd[motor_id].mode = 0x0A; // Motor operation mode || 0x00: Electronic brake mode | 0x0A: Servo (PMSM) mode
-    //   // std::cout << motorcmd.motorCmd[motor_id].tau << '\n';
-    // }
-    // // std::cout << "***********" << std::endl;
-
-    // // Safety
-    // safe.PositionLimit(descmd);
-    // safe.PowerProtect(descmd, highstate_, 1);
-
-    // Set command data
-    udp_.SetSend(descmd); // Unitree SDK
-
-    // Send UDP package to
-    udp_.Send();
-}
-
 
 } // namespace go2hal

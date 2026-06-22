@@ -16,7 +16,7 @@ target_link_libraries(test_go2_hal
 set_property(
   TARGET test_go2_hal
   PROPERTY
-    CXX_STANDARD 11
+    CXX_STANDARD 17
 )
 
 # TODO: Implement the test for python

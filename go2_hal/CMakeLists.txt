@@ -8,14 +8,14 @@ project(go2_hal)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_FIND_DEBUG_MODE FALSE)
 
-set(VERSION 0.1.0)
+set(VERSION 0.2.0)
 
 option(BUILD_GO2HAL_TEST "Build the tests" ON)
+option(BUILD_GO2HAL_PYTHON "Build the python bindings (pygo2_hal)" OFF)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 
 set(INCLUDE_INSTALL_DIR include)  # include
-# set(LIBRARY_INSTALL_DIR lib/go2hal)
 set(LIBRARY_INSTALL_DIR lib)
 set(ConfigFileInstallDir lib/cmake/go2hal)
 
@@ -24,51 +24,54 @@ set(ConfigFileInstallDir lib/cmake/go2hal)
 # GO2 HAL LIBRARY
 # ###################
 
-# Unitree-SDK dependency
-find_package(unitree_legged_sdk QUIET)
-if(NOT unitree_legged_sdk_FOUND)
- # Compile and install unitreesdk if it is not already installed
- add_subdirectory(third_party/unitree_legged_sdk)
+# unitree_sdk2 dependency (DDS-based SDK for Go2/B2/H1/...).
+# NOTE: this replaces the legacy unitree_legged_sdk (UDP-based, Go1-era) dependency.
+find_package(unitree_sdk2 QUIET)
+if(NOT unitree_sdk2_FOUND)
+  # Compile and install unitree_sdk2 if it is not already installed
+  add_subdirectory(third_party/unitree_sdk2)
 endif()
 
-# add_library(go2hal STATIC  # TODO: decide if want it static or dynamic
 add_library(go2hal SHARED
   src/go2_hal.cpp
 )
 
 target_link_libraries(go2hal
   PUBLIC
-  unitree_legged_sdk
+  unitree_sdk2
 )
 
 target_include_directories(go2hal
   PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>   # <prefix>/include
-    # $<INSTALL_INTERFACE:$<$<CONFIG:Debug>:$<INSTALL_PREFIX>/include>>
 )
 
-set_property(TARGET go2hal PROPERTY CXX_STANDARD 11)  # At least std c++11
+set_property(TARGET go2hal PROPERTY CXX_STANDARD 17)  # unitree_sdk2 / cyclonedds-cxx require >= C++17
 
-# # TODO: this is not necesary when using a shared library. Uncomment it if we decide to make the library static
+# # TODO: this is not necessary when using a shared library. Uncomment it if we decide to make the library static
 # set_property(TARGET go2hal PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 
 # ##############
-# PY GO1 HAL
+# PY GO2 HAL
 # ##############
+# TODO: python_interface.cpp still binds the *old* unitree_legged_sdk-style
+# structs (plain public members, e.g. MotorState::q). It needs to be rewritten
+# for unitree_sdk2's IDL-generated accessor-method classes (e.g.
+# unitree_go::msg::dds_::MotorState_::q()) before this can be re-enabled.
+if(BUILD_GO2HAL_PYTHON)
+  add_subdirectory(third_party/pybind11)
 
-# Pybind11 dependency
-add_subdirectory(third_party/pybind11)
-
-pybind11_add_module(pygo2_hal
-  src/python_interface.cpp
-)
-target_link_libraries(pygo2_hal
-  PUBLIC
-    go2hal
-    pybind11::embed
-)
+  pybind11_add_module(pygo2_hal
+    src/python_interface.cpp
+  )
+  target_link_libraries(pygo2_hal
+    PUBLIC
+      go2hal
+      pybind11::embed
+  )
+endif()
 
 
 # #####
@@ -77,8 +80,8 @@ target_link_libraries(pygo2_hal
 if(BUILD_GO2HAL_TEST)
   add_subdirectory(test)
 endif()
- 
- 
+
+
 # #######
 # INSTALL
 # #######
@@ -93,32 +96,8 @@ install(TARGETS
   LIBRARY DESTINATION lib COMPONENT Runtime
   ARCHIVE DESTINATION lib COMPONENT Development
   PUBLIC_HEADER DESTINATION include COMPONENT Development
-  BUNDLE DESTINATION bin COMPONENT Runtime  
+  BUNDLE DESTINATION bin COMPONENT Runtime
 )
-# Get python-site directory. Ref: https://stackoverflow.com/questions/1242904/finding-python-site-packages-directory-with-cmake
-if(NOT PYTHON_SITE)
-  # execute_process(
-  #   COMMAND "${PYTHON_EXECUTABLE}" -c "if True:
-  #     from distutils import sysconfig as sc
-  #     print(sc.get_python_lib(prefix='', plat_specific=True))"
-  #   OUTPUT_VARIABLE PYTHON_SITE
-  #   OUTPUT_STRIP_TRAILING_WHITESPACE
-  # )
-  execute_process(
-    COMMAND "${PYTHON_EXECUTABLE}" -c "if True:
-      from distutils import sysconfig as sc
-      print(sc.get_python_lib(prefix='', standard_lib=True, plat_specific=True))"
-      # print(sc.get_python_lib(prefix='', standard_lib=True, plat_specific=True)+'/dist-packages')"
-    OUTPUT_VARIABLE PYTHON_SITE
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-  )
-endif()
-install(TARGETS
-  pygo2_hal
-  COMPONENT python
-  LIBRARY DESTINATION "${PYTHON_SITE}"
-)
-unset(PYTHON_SITE CACHE)
 
 include(CMakePackageConfigHelpers)
 configure_package_config_file(
@@ -131,24 +110,4 @@ write_basic_package_version_file(
   "${PROJECT_BINARY_DIR}/go2halConfigVersion.cmake"
   VERSION ${VERSION}
   COMPATIBILITY AnyNewerVersion
-  # COMPATIBILITY ExactVersion
 )
-
-# export( # Creates Targets.cmake for build tree
-#   EXPORT go2halTargets
-#   FILE "${PROJECT_BINARY_DIR}/go2halTargets.cmake"
-# )
-# install( # Creates Targets.cmake referencing the relocatable install location
-#   EXPORT go2halTargets
-#   FILE go2halTargets.cmake
-#   # DESTINATION lib/cmake  # TODO: Is it ok this? or do we need
-#   DESTINATION "${ConfigFileInstallDir}"
-# )
-# install(FILES
-#   "${PROJECT_BINARY_DIR}/go2halConfig.cmake"
-#   "${PROJECT_BINARY_DIR}/go2halConfigVersion.cmake"
-#   # "${PROJECT_BINARY_DIR}/unitreesdkTargets.cmake"
-#   DESTINATION "${ConfigFileInstallDir}"
-# )
-
-

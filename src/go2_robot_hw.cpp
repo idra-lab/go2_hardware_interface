@@ -97,16 +97,38 @@ void Go2RobotHw::init()
       ROS_ERROR_NAMED(CLASS_NAME,"Failed to register imu interface.");
       return;
     }
-    //TODO
-    go2_interface_.InitCmdData(go2_lowcmd_);
+
+    // unitree_sdk2 talks to the robot over a DDS channel bound to a specific
+    // network interface (e.g. "eth0" when wired directly to the Go2).
+    ros::NodeHandle private_nh("~");
+    std::string network_interface;
+    private_nh.param<std::string>("network_interface", network_interface, "enp0s31f6");
+
+    go2_interface_ = std::make_unique<go2hal::LowLevelInterface>(network_interface);
+    
+    ROS_INFO_STREAM("Waiting for Go2 lowstate on interface " << network_interface);
+    ros::Time t0 = ros::Time::now();
+	while (ros::ok() && !go2_interface_->HasState())
+	{
+	  if ((ros::Time::now() - t0).toSec() > 5.0)
+	  {
+	    ROS_ERROR("No Go2 LowState received. Check robot IP, network interface, damping/low-level mode, and DDS topic.");
+	    return;
+	  }
+	  ros::Duration(0.01).sleep();
+	}
+
+	ROS_INFO("Go2 LowState received.");
+    
+    go2_interface_->InitCmdData(go2_lowcmd_);
     startup_routine();
 
     ros::NodeHandle root_nh;
-    odom_pub_.reset(new realtime_tools::RealtimePublisher<nav_msgs::Odometry>(root_nh,	"/aliengo/ground_truth", 1));
-    imu_acc_pub_.reset(new realtime_tools::RealtimePublisher<geometry_msgs::Vector3>(root_nh,	"/aliengo/trunk_imu", 1));
-    imu_euler_pub_.reset(new realtime_tools::RealtimePublisher<geometry_msgs::Vector3>(root_nh,	"/aliengo/euler_imu", 1));
-    contact_state_pub_.reset(new realtime_tools::RealtimePublisher<std_msgs::Float64MultiArray>(root_nh,	"/aliengo/contact_force_z", 1));
-    imu_pub_ = std::make_shared<realtime_tools::RealtimePublisher<sensor_msgs::Imu>>(root_nh, "/aliengo/imu", 1);
+    odom_pub_.reset(new realtime_tools::RealtimePublisher<nav_msgs::Odometry>(root_nh,	"/go2/ground_truth", 1));
+    imu_acc_pub_.reset(new realtime_tools::RealtimePublisher<geometry_msgs::Vector3>(root_nh,	"/go2/trunk_imu", 1));
+    imu_euler_pub_.reset(new realtime_tools::RealtimePublisher<geometry_msgs::Vector3>(root_nh,	"/go2/euler_imu", 1));
+    contact_state_pub_.reset(new realtime_tools::RealtimePublisher<std_msgs::Float64MultiArray>(root_nh,	"/go2/contact_force_z", 1));
+    imu_pub_ = std::make_shared<realtime_tools::RealtimePublisher<sensor_msgs::Imu>>(root_nh, "/go2/imu", 1);
 
 }
 
@@ -159,27 +181,28 @@ double b[3] = {1.3110644e-01 ,  2.6221288e-01,   1.3110644e-01};
 void Go2RobotHw::read()
 {
     // Get robot data
-      //TODO
-    go2_state_ = go2_interface_.ReceiveObservation();
+    go2_state_ = go2_interface_->ReceiveObservation();
 
     // ------
     // Joints
     // ------
     for (unsigned int jj = 0; jj < n_dof_; ++jj)
     {
-        joint_position_[jj] = static_cast<double>(go2_state_.motorState[go2_motor_idxs_[jj]].q)     ;
-        joint_velocity_[jj] = static_cast<double>(go2_state_.motorState[go2_motor_idxs_[jj]].dq) ;//velocityFilterBuffer[jj][0];
-        joint_effort_[jj]   = static_cast<double>(go2_state_.motorState[go2_motor_idxs_[jj]].tauEst);
+        const auto& motor = go2_state_.motor_state()[go2_motor_idxs_[jj]];
+        joint_position_[jj] = static_cast<double>(motor.q());
+        joint_velocity_[jj] = static_cast<double>(motor.dq()); //velocityFilterBuffer[jj][0];
+        joint_effort_[jj]   = static_cast<double>(motor.tau_est());
     }
 
     // ---
     // IMU
     // ---
-  
+    const auto& imu = go2_state_.imu_state();
+
   if (not is_remove_yaw_set_)
     {
       // These lines remove init yaw of the robot
-      remove_euler_[2] = -static_cast<double>(go2_state_.imu.rpy[2]);
+      remove_euler_[2] = -static_cast<double>(imu.rpy()[2]);
       remove_quaternion_[0] = cos(remove_euler_[2]/2); // w
       // remove_quaternion[1] = 0.                     // x
       // remove_quaternion[2] = 0.                     // y
@@ -188,10 +211,10 @@ void Go2RobotHw::read()
     }
     if ( base_pub_counter%4 == 0)
     {
-        imu_orientation_raw_[0] = static_cast<double>(go2_state_.imu.quaternion[0]);  // w
-        imu_orientation_raw_[1] = static_cast<double>(go2_state_.imu.quaternion[1]);  // x
-        imu_orientation_raw_[2] = static_cast<double>(go2_state_.imu.quaternion[2]);  // y
-        imu_orientation_raw_[3] = static_cast<double>(go2_state_.imu.quaternion[3]);  // z
+        imu_orientation_raw_[0] = static_cast<double>(imu.quaternion()[0]);  // w
+        imu_orientation_raw_[1] = static_cast<double>(imu.quaternion()[1]);  // x
+        imu_orientation_raw_[2] = static_cast<double>(imu.quaternion()[2]);  // y
+        imu_orientation_raw_[3] = static_cast<double>(imu.quaternion()[3]);  // z
 
         imu_orientation_[0] = remove_quaternion_[0] * imu_orientation_raw_[0] - remove_quaternion_[3] * imu_orientation_raw_[3];
         imu_orientation_[1] = remove_quaternion_[0] * imu_orientation_raw_[1] - remove_quaternion_[3] * imu_orientation_raw_[2];
@@ -199,35 +222,35 @@ void Go2RobotHw::read()
         imu_orientation_[3] = remove_quaternion_[0] * imu_orientation_raw_[3] + remove_quaternion_[3] * imu_orientation_raw_[0];
 
 
-        imu_euler_raw_[0] = static_cast<double>(go2_state_.imu.rpy[0]);  // R
-        imu_euler_raw_[1] = static_cast<double>(go2_state_.imu.rpy[1]);  // P
-        imu_euler_raw_[2] = static_cast<double>(go2_state_.imu.rpy[2]);  // Y
+        imu_euler_raw_[0] = static_cast<double>(imu.rpy()[0]);  // R
+        imu_euler_raw_[1] = static_cast<double>(imu.rpy()[1]);  // P
+        imu_euler_raw_[2] = static_cast<double>(imu.rpy()[2]);  // Y
         imu_euler_[0] = imu_euler_raw_[0] + remove_euler_[0];
         imu_euler_[1] = imu_euler_raw_[1] + remove_euler_[1];
         imu_euler_[2] = imu_euler_raw_[2] + remove_euler_[2];
 
-        imu_ang_vel_[0] = static_cast<double>(go2_state_.imu.gyroscope[0]);
-        imu_ang_vel_[1] = static_cast<double>(go2_state_.imu.gyroscope[1]);
-        imu_ang_vel_[2] = static_cast<double>(go2_state_.imu.gyroscope[2]);
+        imu_ang_vel_[0] = static_cast<double>(imu.gyroscope()[0]);
+        imu_ang_vel_[1] = static_cast<double>(imu.gyroscope()[1]);
+        imu_ang_vel_[2] = static_cast<double>(imu.gyroscope()[2]);
 
-        imu_lin_acc_[0] = static_cast<double>(go2_state_.imu.accelerometer[0]);
-        imu_lin_acc_[1] = static_cast<double>(go2_state_.imu.accelerometer[1]);
-        imu_lin_acc_[2] = static_cast<double>(go2_state_.imu.accelerometer[2]);
-      
+        imu_lin_acc_[0] = static_cast<double>(imu.accelerometer()[0]);
+        imu_lin_acc_[1] = static_cast<double>(imu.accelerometer()[1]);
+        imu_lin_acc_[2] = static_cast<double>(imu.accelerometer()[2]);
+
 
         if(imu_pub_.get() && imu_pub_->trylock()){
-            imu_pub_->msg_.linear_acceleration.x = go2_state_.imu.accelerometer[0];
-            imu_pub_->msg_.linear_acceleration.y = go2_state_.imu.accelerometer[1];
-            imu_pub_->msg_.linear_acceleration.z = go2_state_.imu.accelerometer[2];
+            imu_pub_->msg_.linear_acceleration.x = imu.accelerometer()[0];
+            imu_pub_->msg_.linear_acceleration.y = imu.accelerometer()[1];
+            imu_pub_->msg_.linear_acceleration.z = imu.accelerometer()[2];
 
-            imu_pub_->msg_.angular_velocity.x = go2_state_.imu.gyroscope[0];
-            imu_pub_->msg_.angular_velocity.y = go2_state_.imu.gyroscope[1];
-            imu_pub_->msg_.angular_velocity.z = go2_state_.imu.gyroscope[2];
+            imu_pub_->msg_.angular_velocity.x = imu.gyroscope()[0];
+            imu_pub_->msg_.angular_velocity.y = imu.gyroscope()[1];
+            imu_pub_->msg_.angular_velocity.z = imu.gyroscope()[2];
 
-            imu_pub_->msg_.orientation.w = go2_state_.imu.quaternion[0];
-            imu_pub_->msg_.orientation.x = go2_state_.imu.quaternion[1];
-            imu_pub_->msg_.orientation.y = go2_state_.imu.quaternion[2];
-            imu_pub_->msg_.orientation.z = go2_state_.imu.quaternion[3];
+            imu_pub_->msg_.orientation.w = imu.quaternion()[0];
+            imu_pub_->msg_.orientation.x = imu.quaternion()[1];
+            imu_pub_->msg_.orientation.y = imu.quaternion()[2];
+            imu_pub_->msg_.orientation.z = imu.quaternion()[3];
 
             imu_pub_->msg_.header.stamp = ros::Time::now();
             imu_pub_->unlockAndPublish();
@@ -255,7 +278,7 @@ void Go2RobotHw::read()
           imu_acc_pub_->msg_.x = imu_lin_acc_[0];
           imu_acc_pub_->msg_.y = imu_lin_acc_[1];
           imu_acc_pub_->msg_.z = imu_lin_acc_[2];
-          
+
           imu_acc_pub_->unlockAndPublish();
         }
 
@@ -264,7 +287,7 @@ void Go2RobotHw::read()
           imu_euler_pub_->msg_.x = imu_euler_[0];
           imu_euler_pub_->msg_.y = imu_euler_[1];
           imu_euler_pub_->msg_.z = imu_euler_[2];
-          
+
           imu_euler_pub_->unlockAndPublish();
         }
     }
@@ -273,33 +296,29 @@ void Go2RobotHw::read()
 
 void Go2RobotHw::write()
 {
-  //TODO
     for (unsigned int jj = 0; jj < n_dof_; ++jj)
     {
-      go2_lowcmd_.motorCmd[go2_motor_idxs_[jj]].mode = 0x0A;  // motor switch to servo (PMSM) mode
-      go2_lowcmd_.motorCmd[go2_motor_idxs_[jj]].tau = static_cast<float>(joint_effort_command_[jj]  );
-      //these to be sure to have pure torque control mode
-      go2_lowcmd_.motorCmd[go2_motor_idxs_[jj]].q = unitree::PosStopF; 
-      go2_lowcmd_.motorCmd[go2_motor_idxs_[jj]].Kp = 0;
-      go2_lowcmd_.motorCmd[go2_motor_idxs_[jj]].dq = unitree::VelStopF; 
-      go2_lowcmd_.motorCmd[go2_motor_idxs_[jj]].Kd = 0;
+      auto& motor_cmd = go2_lowcmd_.motor_cmd()[go2_motor_idxs_[jj]];
+      motor_cmd.mode() = 0x0A;  // motor switch to servo (PMSM) mode
+      motor_cmd.tau()  = static_cast<float>(joint_effort_command_[jj]);
+      // these to be sure to have pure torque control mode
+      motor_cmd.q()  = go2hal::PosStopF;
+      motor_cmd.kp() = 0.f;
+      motor_cmd.dq() = go2hal::VelStopF;
+      motor_cmd.kd() = 0.f;
     }
-    go2_lowcmd_.head[0] = 0xFE;
-		go2_lowcmd_.head[1] = 0xEF;
-		go2_lowcmd_.levelFlag = unitree::LOWLEVEL;
+    go2_lowcmd_.head()[0] = 0xFE;
+    go2_lowcmd_.head()[1] = 0xEF;
+    go2_lowcmd_.level_flag() = 0xFF; // LOWLEVEL
 
-    go2_interface_.SendLowCmd(go2_lowcmd_);
-      //TODO
+    go2_interface_->SendLowCmd(go2_lowcmd_);
 }
 
 void Go2RobotHw::send_zero_command()
 {
     std::array<float, 60> zero_command = {0};
-    // go2_interface_->SendCommand(zero_command);
-    //IMPORTANT! this ensures all the Kp Kd gains are set to zero
-
-      //TODO
-    go2_interface_.SendCommand(zero_command);
+    // IMPORTANT! this ensures all the Kp Kd gains are set to zero
+    go2_interface_->SendCommand(zero_command);
 }
 
 void Go2RobotHw::startup_routine()

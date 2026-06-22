@@ -1,8 +1,15 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(go2_hardware_interface)
 
+
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 # Find catkin macros and libraries
 find_package(catkin REQUIRED COMPONENTS
+  roscpp
+  std_msgs
+  sensor_msgs
   controller_manager
   realtime_tools
   base_hardware_interface
@@ -12,6 +19,9 @@ add_subdirectory(go2_hal)
 
 catkin_package(
  CATKIN_DEPENDS
+   roscpp 
+   std_msgs 
+   sensor_msgs 
    controller_manager
    realtime_tools
    base_hardware_interface
@@ -38,9 +48,7 @@ target_link_libraries(ros_control_node
 )
 
 
-
-set_property(TARGET ros_control_node PROPERTY CXX_STANDARD 11)  # At least std c++11
-
+ 
 #############
 ## Install ##
 #############
