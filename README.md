@@ -1,3 +1,3 @@
 # Go2 hardware interface
 
-Hardware Abstraction Layer for Go1 robot
+Hardware Abstraction Layer for Go2 robot

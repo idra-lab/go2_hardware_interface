@@ -28,13 +28,13 @@
 
 namespace go22ros {
 
-class Go1ROSControl {
+class Go2ROSControl {
 public:
 
-    std::string CLASS_NAME = "Go1ROSControl";
+    std::string CLASS_NAME = "Go2ROSControl";
 
-	Go1ROSControl();
-	~Go1ROSControl();
+	Go2ROSControl();
+	~Go2ROSControl();
 
   /** @brief init */
 	void init();
@@ -47,8 +47,8 @@ private:
   /** @brief ROS node handle */
 	std::shared_ptr<ros::NodeHandle> node_handle_;
 	
-  /** @brief Go1 Hardware interface */
-	std::shared_ptr<Go1RobotHw> robot_hw_;
+  /** @brief Go2 Hardware interface */
+	std::shared_ptr<Go2RobotHw> robot_hw_;
 
   /** @brief controller_manager provides the infrastructure to load, unload, start and stop controllers */
 	std::shared_ptr<controller_manager::ControllerManager> controller_manager_;

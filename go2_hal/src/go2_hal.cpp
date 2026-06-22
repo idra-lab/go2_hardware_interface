@@ -10,7 +10,7 @@ namespace go2hal
 // ---------
 // Low-Level
 // ---------
-LowLevelInterface::LowLevelInterface(): safe_(unitree::LeggedType::Go1), udp_(unitree::LOWLEVEL, unitree::UDP_CLIENT_PORT, unitree::UDP_SERVER_IP_BASIC, unitree::UDP_SERVER_PORT)
+LowLevelInterface::LowLevelInterface(): safe_(unitree::LeggedType::Go2), udp_(unitree::LOWLEVEL, unitree::UDP_CLIENT_PORT, unitree::UDP_SERVER_IP_BASIC, unitree::UDP_SERVER_PORT)
 {
     udp_.InitCmdData(lowcmd_);
 
@@ -84,7 +84,7 @@ void LowLevelInterface::SendCommand(std::array<float, 60> motorcmd)
 // ----------
 // High-Level
 // ----------
-HighLevelInterface::HighLevelInterface(): safe_(unitree::LeggedType::Go1), udp_(unitree::LOWLEVEL, unitree::UDP_CLIENT_PORT, unitree::UDP_SERVER_IP_BASIC, unitree::UDP_SERVER_PORT)
+HighLevelInterface::HighLevelInterface(): safe_(unitree::LeggedType::Go2), udp_(unitree::LOWLEVEL, unitree::UDP_CLIENT_PORT, unitree::UDP_SERVER_IP_BASIC, unitree::UDP_SERVER_PORT)
 {
 }
 

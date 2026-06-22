@@ -77,7 +77,7 @@ void print_state(go2hal::LowState state)
 
 int main()
 {
-	std::cout << "Testing Go1-hal. Check the robot is suspended in the air!" << std::endl
+	std::cout << "Testing Go2-hal. Check the robot is suspended in the air!" << std::endl
 						<< "Press Enter to continue..." << std::endl;
 	std::cin.ignore();
 

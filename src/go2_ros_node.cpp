@@ -22,7 +22,7 @@
 #include <chrono>
 #include "go2_interface/go2_ros_control.hpp"
 
-static go22ros::Go1ROSControl _ros_control;
+static go22ros::Go2ROSControl _ros_control;
 
 int main(int argc, char**argv)
 {

@@ -35,11 +35,11 @@ typedef Eigen::Matrix<double, 6,1> butterFilterParams;
 namespace go22ros
 {
 
-class Go1RobotHw : public hardware_interface::RobotHW, public hardware_interface::WolfRobotHwInterface
+class Go2RobotHw : public hardware_interface::RobotHW, public hardware_interface::WolfRobotHwInterface
 {
 public:
-  Go1RobotHw();
-  virtual ~Go1RobotHw();
+  Go2RobotHw();
+  virtual ~Go2RobotHw();
 
   void init();
   void read();
@@ -47,7 +47,7 @@ public:
 
 private:
 
-  /** @brief Map Go1 internal joint indices to WoLF joints order */
+  /** @brief Map Go2 internal joint indices to WoLF joints order */
   std::array<unsigned int, 12> go2_motor_idxs_
           {{
           go2hal::FL_0, go2hal::FL_1, go2hal::FL_2, // LF
@@ -56,7 +56,7 @@ private:
           go2hal::RR_0, go2hal::RR_1, go2hal::RR_2, // RH
           }};
 
-  /** @brief Go1-HAL */
+  /** @brief Go2-HAL */
   go2hal::LowLevelInterface go2_interface_;
   go2hal::LowState go2_state_ = {0};
   go2hal::LowCmd go2_lowcmd_ = {0};

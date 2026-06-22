@@ -23,24 +23,24 @@
 namespace go22ros {
 
 
-Go1ROSControl::Go1ROSControl()
+Go2ROSControl::Go2ROSControl()
 {
 
 }
 
 
-Go1ROSControl::~Go1ROSControl()
+Go2ROSControl::~Go2ROSControl()
 {
 
 }
 
 
-void Go1ROSControl::init()
+void Go2ROSControl::init()
 {
-    ROS_INFO_NAMED(CLASS_NAME,"Initializing Go1ROSControl");
+    ROS_INFO_NAMED(CLASS_NAME,"Initializing Go2ROSControl");
 
 	// Reset RobotHW
-	robot_hw_.reset(new go22ros::Go1RobotHw);
+	robot_hw_.reset(new go22ros::Go2RobotHw);
 
 	// Reseting the namespace of the node handle
 	node_handle_.reset(new ros::NodeHandle(robot_hw_->getRobotName()));
@@ -53,7 +53,7 @@ void Go1ROSControl::init()
 }
 
 
-void Go1ROSControl::update(const ros::Time& time, const ros::Duration& period)
+void Go2ROSControl::update(const ros::Time& time, const ros::Duration& period)
 {
 	// Reading sensor information
 	robot_hw_->read();

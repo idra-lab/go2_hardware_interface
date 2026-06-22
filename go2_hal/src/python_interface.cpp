@@ -20,7 +20,7 @@ namespace py = pybind11;
 
 PYBIND11_MODULE(pygo2_hal, m) {
   m.doc() = R"pbdoc(
-        Go1 HAL Python Bindings
+        Go2 HAL Python Bindings
         -----------------------
         .. currentmodule:: go2_hal
         .. autosummary::

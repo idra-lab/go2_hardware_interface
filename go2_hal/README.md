@@ -1,6 +1,6 @@
-# Go1 HAL
+# Go2 HAL
 
-The Go1 HAL encapsulates Go1 communication with the Controller board through the go2's SDK.
+The Go2 HAL encapsulates Go2 communication with the Controller board through the go2's SDK.
 
 The unitree_legged_sdk is mainly used for communication between any PC and the robot's Controller board.
 It also can be used in other PCs with UDP.

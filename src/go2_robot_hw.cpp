@@ -36,18 +36,18 @@ int64_t utime_now() {
     return (int64_t) (((uint64_t)sec)*1000000 + ((uint64_t)nsec) / 1000);
 }
 
-Go1RobotHw::Go1RobotHw()
+Go2RobotHw::Go2RobotHw()
 {
 
     robot_name_ = "go2";
 }
 
-Go1RobotHw::~Go1RobotHw()
+Go2RobotHw::~Go2RobotHw()
 {
 
 }
 
-void Go1RobotHw::init()
+void Go2RobotHw::init()
 {
 
 
@@ -111,7 +111,7 @@ void Go1RobotHw::init()
 }
 
 
-void Go1RobotHw::filt(const double raw, butterFilterParams & buffer)
+void Go2RobotHw::filt(const double raw, butterFilterParams & buffer)
 {
 //notch filter cut-off 50 Hz; BW 20 Hz.
 //double a[3] = {1.0000000e+00,  -1.7633 ,  0.8541};
@@ -156,7 +156,7 @@ double b[3] = {1.3110644e-01 ,  2.6221288e-01,   1.3110644e-01};
     buffer[1] = buffer[0];
 }
 
-void Go1RobotHw::read()
+void Go2RobotHw::read()
 {
     // Get robot data
       //TODO
@@ -271,7 +271,7 @@ void Go1RobotHw::read()
     base_pub_counter++;
 }
 
-void Go1RobotHw::write()
+void Go2RobotHw::write()
 {
   //TODO
     for (unsigned int jj = 0; jj < n_dof_; ++jj)
@@ -292,7 +292,7 @@ void Go1RobotHw::write()
       //TODO
 }
 
-void Go1RobotHw::send_zero_command()
+void Go2RobotHw::send_zero_command()
 {
     std::array<float, 60> zero_command = {0};
     // go2_interface_->SendCommand(zero_command);
@@ -302,7 +302,7 @@ void Go1RobotHw::send_zero_command()
     go2_interface_.SendCommand(zero_command);
 }
 
-void Go1RobotHw::startup_routine()
+void Go2RobotHw::startup_routine()
 {
     send_zero_command();
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
