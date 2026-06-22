@@ -27,6 +27,11 @@
 #include <unitree/idl/go2/LowState_.hpp>
 
 #include <unitree/dds_wrapper/common/crc.h>
+#include <unitree/robot/go2/robot_state/robot_state_client.hpp>
+
+#include <iostream>
+#include <thread>
+#include <chrono>
 
 namespace go2hal
 {
@@ -111,6 +116,7 @@ private:
   std::atomic<bool> state_received_{false};
 
   LowCmd lowcmd_; // used internally by SendCommand()
+
 };
 
 } // namespace go2hal

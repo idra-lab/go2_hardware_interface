@@ -13,6 +13,21 @@ LowLevelInterface::LowLevelInterface(const std::string& network_interface, int32
   // once before any publisher/subscriber is created.
   ChannelFactory::Instance()->Init(domain_id, network_interface);
 
+  unitree::robot::go2::RobotStateClient rsc;
+  // before creating/sending lowcmd, release sport/internal motion mode
+  rsc.SetTimeout(10.0f);
+  rsc.Init();
+
+  int32_t status = 0;
+  int32_t ret = rsc.ServiceSwitch("sport_mode", 0, status);
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  ret = rsc.ServiceSwitch("sport_mode", 0, status);
+  std::this_thread::sleep_for(std::chrono::seconds(1)); 
+  ret = rsc.ServiceSwitch("sport_mode", 0, status);
+  std::this_thread::sleep_for(std::chrono::seconds(1));  
+  std::cout << "[Go2 HAL] ServiceSwitch sport_mode OFF ret: " << ret << ", status: " << status << std::endl;
+
+  // Create publishers and subscribers to talk with Unitree
   InitCmdData(lowcmd_);
 
   lowstate_.imu_state().quaternion()[0] = 1.f;
@@ -54,7 +69,7 @@ void LowLevelInterface::InitCmdData(LowCmd& cmd)
 
   for (auto& motor_cmd : cmd.motor_cmd())
   {
-    motor_cmd.mode() = 0x0A; // motor switch to servo (PMSM) mode
+    motor_cmd.mode() = 0x01; // motor switch to servo (PMSM) mode
     motor_cmd.q()    = PosStopF;
     motor_cmd.dq()   = VelStopF;
     motor_cmd.kp()   = 0.f;
@@ -80,7 +95,7 @@ void LowLevelInterface::SendCommand(const std::array<float, 60>& motorcmd)
   for (int motor_id = 0; motor_id < 12; ++motor_id)
   {
     auto& m = lowcmd_.motor_cmd()[motor_id];
-    m.mode() = 0x0A;
+    m.mode() = 0x01;
     m.q()   = motorcmd[motor_id * 5 + 0];
     m.dq()  = motorcmd[motor_id * 5 + 1];
     m.kp()  = motorcmd[motor_id * 5 + 2];
