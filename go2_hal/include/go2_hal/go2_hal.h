@@ -36,8 +36,9 @@
 namespace go2hal
 {
 
-using LowCmd   = unitree_go::msg::dds_::LowCmd_;
-using LowState = unitree_go::msg::dds_::LowState_;
+typedef  unitree_go::msg::dds_::LowState_ LowState;
+
+typedef  unitree_go::msg::dds_::LowCmd_ LowCmd;
 
 /** @brief DDS topic names used for the low-level control interface. */
 constexpr const char* TOPIC_LOWCMD   = "rt/lowcmd";
@@ -74,7 +75,10 @@ constexpr float VelStopF = 16000.0f;
 class LowLevelInterface
 {
 public:
-  /**
+
+
+
+/**
    * @param network_interface Network interface connected to the robot (e.g. "eth0").
    *        Forwarded to unitree::robot::ChannelFactory::Instance()->Init().
    * @param domain_id DDS domain id, 0 unless your setup requires otherwise.
@@ -87,16 +91,16 @@ public:
   LowLevelInterface& operator=(const LowLevelInterface&) = delete;
 
   /** @brief Returns the most recently received LowState_ (thread-safe). */
-  LowState ReceiveObservation();
+  unitree_go::msg::dds_::LowState_ ReceiveObservation();
 
   /**
    * @brief Initializes a LowCmd_ with safe defaults: every motor in PMSM
    * (servo) mode, zero torque, position/velocity targets set to "don't care".
    */
-  void InitCmdData(LowCmd& cmd);
+  void InitLowCmd();
 
   /** @brief Computes the CRC and publishes the command over DDS. */
-  void SendLowCmd(LowCmd& cmd);
+  void SendLowCmd(unitree_go::msg::dds_::LowCmd_& cmd);
 
   /**
    * @brief Convenience overload matching the legacy go2_hal API: builds a
@@ -105,18 +109,25 @@ public:
    */
   void SendCommand(const std::array<float, 60>& motorcmd);
   bool HasState() const;
-private:
-  void LowStateMessageHandler(const void* message);
 
-  unitree::robot::ChannelPublisherPtr<LowCmd>    lowcmd_publisher_;
-  unitree::robot::ChannelSubscriberPtr<LowState> lowstate_subscriber_;
 
-  std::mutex lowstate_mutex_;
-  LowState lowstate_;
-  std::atomic<bool> state_received_{false};
+  private:
 
-  LowCmd lowcmd_; // used internally by SendCommand()
+    void Init();
+    void LowStateMessageHandler(const void* messages);
+ 
+    std::array<unsigned int, 12> go2_motor_idxs_;
 
+ 
+    unitree_go::msg::dds_::LowCmd_ low_cmd{};
+    unitree_go::msg::dds_::LowState_ low_state{};
+
+    unitree::robot::ChannelPublisherPtr<unitree_go::msg::dds_::LowCmd_>    lowcmd_publisher_;
+    unitree::robot::ChannelSubscriberPtr<unitree_go::msg::dds_::LowState_ > lowstate_subscriber_;
+
+    /*LowCmd write thread*/
+ 
+    std::thread lowCmdWriteThread_;
 };
 
 } // namespace go2hal

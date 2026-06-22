@@ -85,7 +85,7 @@ int main(int argc, char** argv)
 
 	go2hal::LowState state;
 	go2hal::LowCmd lowcmd;
-	robot_interface.InitCmdData(lowcmd);
+	robot_interface.InitLowCmd();
 	std::array<float, 60> zero_command = {0};
 
 

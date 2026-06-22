@@ -28,81 +28,117 @@ LowLevelInterface::LowLevelInterface(const std::string& network_interface, int32
   std::cout << "[Go2 HAL] ServiceSwitch sport_mode OFF ret: " << ret << ", status: " << status << std::endl;
 
   // Create publishers and subscribers to talk with Unitree
-  InitCmdData(lowcmd_);
+  Init();
 
-  lowstate_.imu_state().quaternion()[0] = 1.f;
-  lowstate_.level_flag() = 0xFF; // LOWLEVEL
-
-  lowcmd_publisher_.reset(new ChannelPublisher<LowCmd>(TOPIC_LOWCMD));
-  lowcmd_publisher_->InitChannel();
-
-  lowstate_subscriber_.reset(new ChannelSubscriber<LowState>(TOPIC_LOWSTATE));
-  lowstate_subscriber_->InitChannel(
-      std::bind(&LowLevelInterface::LowStateMessageHandler, this, std::placeholders::_1), 1);
 }
 
-
-bool LowLevelInterface::HasState() const
+void LowLevelInterface::Init()
 {
-  return state_received_.load(std::memory_order_relaxed);
+    InitLowCmd();
+    low_state.imu_state().quaternion()[0] = 1.f;
+    low_state.level_flag() = 0xFF; // LOWLEVEL
+    /*create publisher*/
+    lowcmd_publisher_.reset(new ChannelPublisher<unitree_go::msg::dds_::LowCmd_>(TOPIC_LOWCMD));
+    lowcmd_publisher_->InitChannel();
+
+    /*create subscriber*/
+    lowstate_subscriber_.reset(new ChannelSubscriber<unitree_go::msg::dds_::LowState_>(TOPIC_LOWSTATE));
+    lowstate_subscriber_->InitChannel(std::bind(&LowLevelInterface::LowStateMessageHandler, this, std::placeholders::_1), 1);
+
+    /*loop publishing thread*/
+    //lowCmdWriteThread_ =    std::thread(&LowLevelInterface::SendCommand, this);
 }
+
+void LowLevelInterface::InitLowCmd()
+{
+    low_cmd.head()[0] = 0xFE;
+    low_cmd.head()[1] = 0xEF;
+    low_cmd.level_flag() = 0xFF;
+    low_cmd.gpio() = 0;
+
+    for(int i=0; i<20; i++)
+    {
+        low_cmd.motor_cmd()[i].mode() = (0x01);   // motor switch to servo (PMSM) mode
+        low_cmd.motor_cmd()[i].q() = (PosStopF);
+        low_cmd.motor_cmd()[i].kp() = (0);
+        low_cmd.motor_cmd()[i].dq() = (VelStopF);
+        low_cmd.motor_cmd()[i].kd() = (0);
+        low_cmd.motor_cmd()[i].tau() = (0);
+    }
+}
+ 
 
 void LowLevelInterface::LowStateMessageHandler(const void* message)
 {
-  std::lock_guard<std::mutex> lock(lowstate_mutex_);
-  lowstate_ = *static_cast<const LowState*>(message);
-  state_received_.store(true, std::memory_order_relaxed);
+    low_state = *(unitree_go::msg::dds_::LowState_*)message;
 }
 
-LowState LowLevelInterface::ReceiveObservation()
+
+unitree_go::msg::dds_::LowState_ LowLevelInterface::ReceiveObservation()
 {
-  std::lock_guard<std::mutex> lock(lowstate_mutex_);
-  return lowstate_;
+  return low_state;
 }
 
-void LowLevelInterface::InitCmdData(LowCmd& cmd)
+
+
+uint32_t crc32_core(uint32_t* ptr, uint32_t len)
 {
-  cmd.head()[0] = 0xFE;
-  cmd.head()[1] = 0xEF;
-  cmd.level_flag() = 0xFF; // LOWLEVEL
-  cmd.gpio() = 0;
+    unsigned int xbit = 0;
+    unsigned int data = 0;
+    unsigned int CRC32 = 0xFFFFFFFF;
+    const unsigned int dwPolynomial = 0x04c11db7;
 
-  for (auto& motor_cmd : cmd.motor_cmd())
-  {
-    motor_cmd.mode() = 0x01; // motor switch to servo (PMSM) mode
-    motor_cmd.q()    = PosStopF;
-    motor_cmd.dq()   = VelStopF;
-    motor_cmd.kp()   = 0.f;
-    motor_cmd.kd()   = 0.f;
-    motor_cmd.tau()  = 0.f;
-  }
+    for (unsigned int i = 0; i < len; i++)
+    {
+        xbit = 1 << 31;
+        data = ptr[i];
+        for (unsigned int bits = 0; bits < 32; bits++)
+        {
+            if (CRC32 & 0x80000000)
+            {
+                CRC32 <<= 1;
+                CRC32 ^= dwPolynomial;
+            }
+            else
+            {
+                CRC32 <<= 1;
+            }
+
+            if (data & xbit)
+                CRC32 ^= dwPolynomial;
+            xbit >>= 1;
+        }
+    }
+
+    return CRC32;
 }
 
-void LowLevelInterface::SendLowCmd(LowCmd& cmd)
+void LowLevelInterface::SendLowCmd(unitree_go::msg::dds_::LowCmd_& cmd)
 {
-  // TODO: port over safety checks equivalent to unitree_legged_sdk's
-  // Safety::PositionLimit() / PowerProtect() if/when needed; unitree_sdk2
-  // does not ship an equivalent helper, so any joint/power limiting must be
-  // implemented here or upstream in go2_robot_hw before calling SendLowCmd().
-
-  cmd.crc() = crc32_core(reinterpret_cast<uint32_t*>(&cmd), (sizeof(LowCmd) >> 2) - 1);
-  lowcmd_publisher_->Write(cmd);
-}
+   cmd.crc() = crc32_core(reinterpret_cast<uint32_t*>(&cmd), (sizeof(unitree_go::msg::dds_::LowCmd_ ) >> 2) - 1);
+   lowcmd_publisher_->Write(cmd);
+ }
 
 void LowLevelInterface::SendCommand(const std::array<float, 60>& motorcmd)
 {
-  lowcmd_.level_flag() = 0xFF; // LOWLEVEL
+  low_cmd.head()[0] = 0xFE;
+  low_cmd.head()[1] = 0xEF;
+  low_cmd.level_flag() = 0xFF;
+  low_cmd.gpio() = 0;
+
   for (int motor_id = 0; motor_id < 12; ++motor_id)
   {
-    auto& m = lowcmd_.motor_cmd()[motor_id];
-    m.mode() = 0x01;
-    m.q()   = motorcmd[motor_id * 5 + 0];
-    m.dq()  = motorcmd[motor_id * 5 + 1];
-    m.kp()  = motorcmd[motor_id * 5 + 2];
-    m.kd()  = motorcmd[motor_id * 5 + 3];
-    m.tau() = motorcmd[motor_id * 5 + 4];
+    auto& m = low_cmd.motor_cmd()[motor_id];
+
+    m.mode() = 0x0A;
+    m.q()    = PosStopF;
+    m.dq()   = VelStopF;
+    m.kp()   = motorcmd[motor_id * 5 + 2];
+    m.kd()   = motorcmd[motor_id * 5 + 3];
+    m.tau()  = motorcmd[motor_id * 5 + 4];
   }
-  SendLowCmd(lowcmd_);
+
+  SendLowCmd(low_cmd);
 }
 
 } // namespace go2hal

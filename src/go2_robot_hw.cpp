@@ -108,19 +108,11 @@ void Go2RobotHw::init()
     
     ROS_INFO_STREAM("Waiting for Go2 lowstate on interface " << network_interface);
     ros::Time t0 = ros::Time::now();
-	while (ros::ok() && !go2_interface_->HasState())
-	{
-	  if ((ros::Time::now() - t0).toSec() > 5.0)
-	  {
-	    ROS_ERROR("No Go2 LowState received. Check robot IP, network interface, damping/low-level mode, and DDS topic.");
-	    return;
-	  }
-	  ros::Duration(0.01).sleep();
-	}
+	 
 
-	ROS_INFO("Go2 LowState received.");
+	ROS_INFO("Go2 Hw interface running.");
     
-    go2_interface_->InitCmdData(go2_lowcmd_);
+    go2_interface_->InitLowCmd();
     startup_routine();
 
     ros::NodeHandle root_nh;
@@ -299,7 +291,7 @@ void Go2RobotHw::write()
     for (unsigned int jj = 0; jj < n_dof_; ++jj)
     {
       auto& motor_cmd = go2_lowcmd_.motor_cmd()[go2_motor_idxs_[jj]];
-      motor_cmd.mode() = 0x0A;  // motor switch to servo (PMSM) mode
+      motor_cmd.mode() = 0x01;  // motor switch to servo (PMSM) mode
       motor_cmd.tau()  = static_cast<float>(joint_effort_command_[jj]);
       // these to be sure to have pure torque control mode
       motor_cmd.q()  = go2hal::PosStopF;
@@ -313,6 +305,10 @@ void Go2RobotHw::write()
 
     go2_interface_->SendLowCmd(go2_lowcmd_);
 }
+
+
+
+
 
 void Go2RobotHw::send_zero_command()
 {
