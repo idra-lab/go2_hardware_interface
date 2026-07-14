@@ -18,7 +18,7 @@
 #include <unitree/idl/go2/LowState_.hpp>
 
 #include <unitree/dds_wrapper/common/crc.h>
-#include <unitree/robot/go2/robot_state/robot_state_client.hpp>
+#include <unitree/robot/b2/motion_switcher/motion_switcher_client.hpp>
 
 #include <iostream>
 #include <thread>
@@ -110,6 +110,11 @@ namespace go2hal
     void activateService(unitree::robot::go2::RobotStateClient &rsc, const std::string &serviceName, int activate);
 
   private:
+
+    int queryMotionStatus();
+    std::string unitree::robot::b2::queryServiceName(std::string form,std::string name);
+
+  
     void Init();
     void LowStateMessageHandler(const void *messages);
 
