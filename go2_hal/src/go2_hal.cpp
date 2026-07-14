@@ -11,68 +11,15 @@ namespace go2hal
     {
         // ChannelFactory is a process-wide singleton; Init() must be called exactly
         // once before any publisher/subscriber is created.
+        std::cout << "costruttore" << std::endl;
         ChannelFactory::Instance()->Init(domain_id, network_interface);
-        unitree::robot::go2::RobotStateClient rsc;
-
-        rsc.SetTimeout(10.0f);
-        rsc.Init();
-        while (queryServiceStatus(rsc, "sport_mode"))
-        {
-            std::cout << "Try to deactivate the service: " << "sport_mode" << std::endl;
-            activateService(rsc, "sport_mode", 0);
-            sleep(1);
-        }
-        // before creating/sending lowcmd, release sport/internal motion mode
-        // rsc.SetTimeout(10.0f);
-        // rsc.Init();
-
-        // int32_t status = 0;
-        // int32_t ret = rsc.ServiceSwitch("sport_mode", 0, status);
-        // std::this_thread::sleep_for(std::chrono::seconds(1));
-        // ret = rsc.ServiceSwitch("sport_mode", 0, status);
-        // std::this_thread::sleep_for(std::chrono::seconds(1));
-        // ret = rsc.ServiceSwitch("sport_mode", 0, status);
-        // std::this_thread::sleep_for(std::chrono::seconds(1));
-        // std::cout << "[Go2 HAL] ServiceSwitch sport_mode OFF ret: " << ret << ", status: " << status << std::endl;
-
-        // Create publishers and subscribers to talk with Unitree
         Init();
-    }
-
-    int LowLevelInterface::queryServiceStatus(unitree::robot::go2::RobotStateClient &rsc, const std::string &serviceName)
-    {
-        std::vector<unitree::robot::go2::ServiceState> serviceStateList;
-        int ret, serviceStatus;
-        ret = rsc.ServiceList(serviceStateList);
-        size_t i, count = serviceStateList.size();
-        for (i = 0; i < count; i++)
-        {
-            const unitree::robot::go2::ServiceState &serviceState = serviceStateList[i];
-            if (serviceState.name == serviceName)
-            {
-                if (serviceState.status == 0)
-                {
-                    std::cout << "name: " << serviceState.name << " is activate" << std::endl;
-                    serviceStatus = 1;
-                }
-                else
-                {
-                    std::cout << "name:" << serviceState.name << " is deactivate" << std::endl;
-                    serviceStatus = 0;
-                }
-            }
-        }
-        return serviceStatus;
-    }
-
-    void LowLevelInterface::activateService(unitree::robot::go2::RobotStateClient &rsc, const std::string &serviceName, int activate)
-    {
-        int a=0;
-        rsc.ServiceSwitch(serviceName, activate, a);
     }
 
     void LowLevelInterface::Init()
     {
+        std::cout << "Init" << std::endl;
+
         InitLowCmd();
         low_state.imu_state().quaternion()[0] = 1.f;
         low_state.level_flag() = 0xFF; // LOWLEVEL
@@ -83,6 +30,29 @@ namespace go2hal
         /*create subscriber*/
         lowstate_subscriber_.reset(new ChannelSubscriber<unitree_go::msg::dds_::LowState_>(TOPIC_LOWSTATE));
         lowstate_subscriber_->InitChannel(std::bind(&LowLevelInterface::LowStateMessageHandler, this, std::placeholders::_1), 1);
+        std::cout << "Initialized channels" << std::endl;
+        
+        // deactivate sport-client
+        /*init MotionSwitcherClient*/
+        msc.reset(new unitree::robot::b2::MotionSwitcherClient());
+
+        msc->SetTimeout(10.0f); 
+        msc->Init();
+        std::cout << "Init msc" << std::endl;
+
+        while(queryServiceStatus())
+        {
+            std::cout << "Try to deactivate the motion control-related service." << std::endl;
+            int32_t ret = msc->ReleaseMode(); 
+            if (ret == 0) {
+                std::cout << "ReleaseMode succeeded." << std::endl;
+            } else {
+                std::cout << "ReleaseMode failed. Error code: " << ret << std::endl;
+            }
+            sleep(5);
+        }
+        std::cout << "finished init" << std::endl;
+
     }
     void LowLevelInterface::InitLowCmd()
     {
@@ -100,6 +70,46 @@ namespace go2hal
             low_cmd.motor_cmd()[i].kd() = (0);
             low_cmd.motor_cmd()[i].tau() = (0);
         }
+    }
+
+    int LowLevelInterface::queryServiceStatus()
+    {
+        std::string robotForm,motionName;
+        int motionStatus;
+        int32_t ret = msc->CheckMode(robotForm,motionName);
+        if (ret == 0) {
+            std::cout << "CheckMode succeeded." << std::endl;
+        } else {
+            std::cout << "CheckMode failed. Error code: " << ret << std::endl;
+        }
+        if(motionName.empty())
+        {
+            std::cout << "The motion control-related service is deactivated." << std::endl;
+            motionStatus = 0;
+        }
+        else
+        {
+            std::string serviceName = queryServiceName(robotForm,motionName);
+            std::cout << "Service: "<< serviceName<< " is activate" << std::endl;
+            motionStatus = 1;
+        }
+        return motionStatus;
+    }
+
+    std::string LowLevelInterface::queryServiceName(std::string form,std::string name)
+    {
+        if(form == "0")
+        {
+            if(name == "normal" ) return "sport_mode"; 
+            if(name == "ai" ) return "ai_sport"; 
+            if(name == "advanced" ) return "advanced_sport"; 
+        }
+        else
+        {
+            if(name == "ai-w" ) return "wheeled_sport(go2W)"; 
+            if(name == "normal-w" ) return "wheeled_sport(b2W)";
+        }
+        return "";
     }
 
     void LowLevelInterface::LowStateMessageHandler(const void *message)

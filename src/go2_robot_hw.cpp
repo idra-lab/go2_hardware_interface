@@ -109,7 +109,7 @@ void Go2RobotHw::init()
     ROS_INFO_STREAM("Waiting for Go2 lowstate on interface " << network_interface);
     ros::Time t0 = ros::Time::now();
 	 
-
+  
 	ROS_INFO("Go2 Hw interface running.");
     
     go2_interface_->InitLowCmd();

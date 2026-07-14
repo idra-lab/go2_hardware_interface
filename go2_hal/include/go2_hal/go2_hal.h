@@ -106,15 +106,11 @@ namespace go2hal
     void SendCommand(const std::array<float, 60> &motorcmd);
     bool HasState() const;
 
-    int queryServiceStatus(unitree::robot::go2::RobotStateClient &rsc, const std::string &serviceName);
-    void activateService(unitree::robot::go2::RobotStateClient &rsc, const std::string &serviceName, int activate);
-
+    int queryServiceStatus();
+    std::string queryServiceName(std::string form,std::string name);
   private:
 
-    int queryMotionStatus();
-    std::string unitree::robot::b2::queryServiceName(std::string form,std::string name);
-
-  
+    std::shared_ptr<unitree::robot::b2::MotionSwitcherClient> msc;
     void Init();
     void LowStateMessageHandler(const void *messages);
 

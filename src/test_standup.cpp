@@ -17,23 +17,24 @@ constexpr double VelStopF = (16000.0f);
 class Go2HALStandDemo
 {
 public:
-    explicit Go2HALStandDemo(const std::string &network_interface, int32_t domain_id = 0)
-        : hal_interface_(network_interface, domain_id)
-    {}
+    Go2HALStandDemo(const std::string &network_interface, int32_t domain_id = 0)
+    {
+        std::cout << "inside constructor\n";
+        hal_interface_.reset(new go2hal::LowLevelInterface(network_interface, domain_id));
+        std::cout << "hal constructed\n";
+    }
 
     ~Go2HALStandDemo() = default;
 
-    void Init();
     void Start();
 
 private:
-    void InitLowCmd();
     void LowCmdWrite();
     void PrintSensorData();
 
 private:
-    go2hal::LowLevelInterface hal_interface_;
-
+    std::shared_ptr<go2hal::LowLevelInterface> hal_interface_;
+    
     float Kp = 60.0;
     float Kd = 5.0;
     double time_consume = 0;
@@ -69,35 +70,11 @@ private:
     std::atomic<bool> running_{true};
 };
 
-void Go2HALStandDemo::Init()
-{
-    InitLowCmd();
-    
-    // LowLevelInterface already initializes DDS and disables sport_mode
-    // No need to call MotionSwitcherClient as go2_hal handles this
-
-    std::cout << "[Go2HAL Stand Demo] Initialized" << std::endl;
-    std::cout << "WARNING: Make sure the robot is hung up or lying on the ground." << std::endl;
-}
-
-void Go2HALStandDemo::InitLowCmd()
-{
-    // Initialize motor command array with safe defaults
-    for (int motor_id = 0; motor_id < 12; ++motor_id)
-    {
-        motor_cmd_[motor_id * 5 + 0] = PosStopF;  // q
-        motor_cmd_[motor_id * 5 + 1] = VelStopF;  // dq
-        motor_cmd_[motor_id * 5 + 2] = 0;         // Kp
-        motor_cmd_[motor_id * 5 + 3] = 0;         // Kd
-        motor_cmd_[motor_id * 5 + 4] = 0;         // tau
-    }
-}
-
 void Go2HALStandDemo::PrintSensorData()
 {
     if (_percent_4 < 1)
     {
-        auto low_state = hal_interface_.ReceiveObservation();
+        auto low_state = hal_interface_->ReceiveObservation();
         std::cout << "Read sensor data example: " << std::endl;
         std::cout << "Joint 0 pos: " << low_state.motor_state()[0].q() << std::endl;
         std::cout << "Imu accelerometer : " << "x: " << low_state.imu_state().accelerometer()[0] 
@@ -123,7 +100,7 @@ void Go2HALStandDemo::LowCmdWrite()
     {
         if (firstRun)
         {
-            auto low_state = hal_interface_.ReceiveObservation();
+            auto low_state = hal_interface_->ReceiveObservation();
             for (int i = 0; i < 12; i++)
             {
                 _startPos[i] = low_state.motor_state()[i].q();
@@ -188,7 +165,7 @@ void Go2HALStandDemo::LowCmdWrite()
         }
 
         // Send the command using HAL interface
-        hal_interface_.SendCommand(motor_cmd_);
+        hal_interface_->SendCommand(motor_cmd_);
     }
 }
 
@@ -231,7 +208,7 @@ int main(int argc, const char** argv)
               << ", domain_id: " << domain_id << std::endl;
 
     Go2HALStandDemo demo(network_interface, domain_id);
-    demo.Init();
+    std::cout << "constructed element\n";
     demo.Start();
 
     return 0;
