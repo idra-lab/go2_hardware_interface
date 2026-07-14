@@ -102,7 +102,7 @@ void Go2RobotHw::init()
     // network interface (e.g. "eth0" when wired directly to the Go2).
     ros::NodeHandle private_nh("~");
     std::string network_interface;
-    private_nh.param<std::string>("network_interface", network_interface, "enp0s31f6");
+    private_nh.param<std::string>("network_interface", network_interface, "enxa0cec83543c1");
 
     go2_interface_ = std::make_unique<go2hal::LowLevelInterface>(network_interface);
     
@@ -302,6 +302,7 @@ void Go2RobotHw::write()
     go2_lowcmd_.head()[0] = 0xFE;
     go2_lowcmd_.head()[1] = 0xEF;
     go2_lowcmd_.level_flag() = 0xFF; // LOWLEVEL
+    go2_lowcmd_.gpio() = 0;
 
     go2_interface_->SendLowCmd(go2_lowcmd_);
 }
