@@ -41,8 +41,8 @@ add_executable(ros_control_node
     src/go2_ros_control.cpp
     src/go2_ros_node.cpp)
 
-add_executable(funziona
-src/test.cpp
+add_executable(test_standup
+src/test_standup.cpp
 )
 
 # Specify libraries to link a library or executable target against
@@ -51,7 +51,7 @@ target_link_libraries(ros_control_node
   go2hal
 )
 
-target_link_libraries(funziona
+target_link_libraries(test_standup
   ${catkin_LIBRARIES}
   go2hal
 )
@@ -64,7 +64,7 @@ target_link_libraries(funziona
 install(  TARGETS ros_control_node  
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 
-  install(  TARGETS funziona  
+  install(  TARGETS test_standup  
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
   
   
