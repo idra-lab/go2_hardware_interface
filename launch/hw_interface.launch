@@ -2,7 +2,7 @@
 <launch>
 
 	<!-- Network interface connected to the Go2 (used by unitree_sdk2's DDS ChannelFactory) -->
-	<arg name="network_interface" default="enxa0cec83543c1" />
+	<arg name="network_interface" default="enp0s31f6" />
 	<arg name="rviz_conf" default="$(find go2_description)/rviz/conf_hw.rviz"/>
 
 
