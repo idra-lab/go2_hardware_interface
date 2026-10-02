@@ -36,7 +36,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
-add_executable(ros_control_node
+add_executable(go2_ros_control_node
     src/go2_robot_hw.cpp
     src/go2_ros_control.cpp
     src/go2_ros_node.cpp)
@@ -46,7 +46,7 @@ src/test_standup.cpp
 )
 
 # Specify libraries to link a library or executable target against
-target_link_libraries(ros_control_node
+target_link_libraries(go2_ros_control_node
   ${catkin_LIBRARIES}
   go2hal
 )
@@ -61,7 +61,7 @@ target_link_libraries(test_standup
 ## Install ##
 #############
 
-install(  TARGETS ros_control_node  
+install(  TARGETS go2_ros_control_node  
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 
   install(  TARGETS test_standup  

@@ -12,7 +12,7 @@
 	<node pkg="tf" type="static_transform_publisher" name="world_broadcaster" args="0 0 0 0 0 0   /base_link /world  200"/>
 
 
-	<node name="robot_hardware_interface" pkg="go2_hardware_interface" type="ros_control_node" respawn="false" output="screen">
+	<node name="robot_hardware_interface" pkg="go2_hardware_interface" type="go2_ros_control_node" respawn="false" output="screen">
 		<param name="network_interface" value="$(arg network_interface)" />
 	</node>
 
