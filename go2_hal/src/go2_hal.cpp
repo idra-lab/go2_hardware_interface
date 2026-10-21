@@ -1,6 +1,7 @@
 #include "go2_hal/go2_hal.h"
 
 #include <chrono>
+#include <cstring>
 #include <stdexcept>
 #include <thread>
 
@@ -233,9 +234,47 @@ namespace go2hal
         return CRC32;
     }
 
+    /* The CRC is taken over the raw LowCmd_ memory, padding included, but DDS does not transmit
+     * padding: the robot recomputes the CRC with the padding zeroed. A command whose padding holds
+     * stale bytes (any LowCmd_ that was not explicitly zeroed, e.g. a member of a heap-allocated
+     * object) therefore gets a CRC the robot rejects, every frame is dropped, and the motors fall
+     * back to idle. Whether it happens depends on the heap history of the process, so the CRC is
+     * computed on a copy rebuilt field by field in zeroed memory. */
+    static uint32_t lowCmdCrc(const LowCmd &cmd)
+    {
+        LowCmd clean;
+        std::memset(static_cast<void *>(&clean), 0, sizeof(clean));
+        clean.head() = cmd.head();
+        clean.level_flag() = cmd.level_flag();
+        clean.frame_reserve() = cmd.frame_reserve();
+        clean.sn() = cmd.sn();
+        clean.version() = cmd.version();
+        clean.bandwidth() = cmd.bandwidth();
+        for (int i = 0; i < 20; ++i)
+        {
+            const auto &src = cmd.motor_cmd()[i];
+            auto &dst = clean.motor_cmd()[i];
+            dst.mode() = src.mode();
+            dst.q() = src.q();
+            dst.dq() = src.dq();
+            dst.tau() = src.tau();
+            dst.kp() = src.kp();
+            dst.kd() = src.kd();
+            dst.reserve() = src.reserve();
+        }
+        clean.bms_cmd().off() = cmd.bms_cmd().off();
+        clean.bms_cmd().reserve() = cmd.bms_cmd().reserve();
+        clean.wireless_remote() = cmd.wireless_remote();
+        clean.led() = cmd.led();
+        clean.fan() = cmd.fan();
+        clean.gpio() = cmd.gpio();
+        clean.reserve() = cmd.reserve();
+        return crc32_core(reinterpret_cast<uint32_t *>(&clean), (sizeof(LowCmd) >> 2) - 1);
+    }
+
     void LowLevelInterface::SendLowCmd(unitree_go::msg::dds_::LowCmd_ &cmd)
     {
-        cmd.crc() = crc32_core(reinterpret_cast<uint32_t *>(&cmd), (sizeof(unitree_go::msg::dds_::LowCmd_) >> 2) - 1);
+        cmd.crc() = lowCmdCrc(cmd);
         lowcmd_publisher_->Write(cmd);
     }
 
