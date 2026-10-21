@@ -81,7 +81,7 @@ namespace go2hal
      */
     explicit LowLevelInterface(const std::string &network_interface, int32_t domain_id = 0);
 
-    ~LowLevelInterface() = default;
+    ~LowLevelInterface();
 
     LowLevelInterface(const LowLevelInterface &) = delete;
     LowLevelInterface &operator=(const LowLevelInterface &) = delete;
@@ -107,10 +107,25 @@ namespace go2hal
     bool HasState() const;
 
     int queryServiceStatus();
+
+    /** @brief Publish zero-torque low-level commands for @p seconds at 500 Hz (blocking).
+     *
+     *  The Go2 cuts the motors if rt/lowcmd stops for more than ~20 ms after the motion service
+     *  is released, and only the motion service can re-energise them. */
+    void keepMotorsAlive(double seconds);
+
+    /** @brief Publish zero-torque commands from a background thread until stopKeepAlive(). */
+    void startKeepAlive();
+
+    /** @brief Stop and join the keep-alive thread. Idempotent, cheap once stopped. */
+    void stopKeepAlive();
     std::string queryServiceName(std::string form,std::string name);
   private:
 
     std::shared_ptr<unitree::robot::b2::MotionSwitcherClient> msc;
+
+    std::thread keep_alive_thread_;
+    std::atomic<bool> keep_alive_running_{false};
     void Init();
     void LowStateMessageHandler(const void *messages);
 

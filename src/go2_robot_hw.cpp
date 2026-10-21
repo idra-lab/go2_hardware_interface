@@ -114,6 +114,10 @@ void Go2RobotHw::init()
     
     go2_interface_->InitLowCmd();
     startup_routine();
+    // Nothing publishes rt/lowcmd until the first write(), and creating the publishers and the
+    // controller manager takes longer than the Go2 watchdog allows. Keep streaming zero commands
+    // so the motors are not cut in the meantime.
+    go2_interface_->startKeepAlive();
 
     ros::NodeHandle root_nh;
     odom_pub_.reset(new realtime_tools::RealtimePublisher<nav_msgs::Odometry>(root_nh,	"/go2/ground_truth", 1));
@@ -288,6 +292,9 @@ void Go2RobotHw::read()
 
 void Go2RobotHw::write()
 {
+    // Take over the command stream from the start-up keep-alive (no-op after the first call).
+    go2_interface_->stopKeepAlive();
+
     for (unsigned int jj = 0; jj < n_dof_; ++jj)
     {
       auto& motor_cmd = go2_lowcmd_.motor_cmd()[go2_motor_idxs_[jj]];

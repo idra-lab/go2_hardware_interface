@@ -1,6 +1,8 @@
 #include "go2_hal/go2_hal.h"
 
+#include <chrono>
 #include <stdexcept>
+#include <thread>
 
 namespace go2hal
 {
@@ -40,20 +42,99 @@ namespace go2hal
         msc->Init();
         std::cout << "Init msc" << std::endl;
 
-        while(queryServiceStatus())
+        // While the motion (sport) service is active it discards every lowcmd. Retry the release
+        // until CheckMode confirms it; a failed query (-1) is retried too, since ReleaseMode is
+        // harmless when nothing is running.
+        const int max_release_attempts = 6;
+        int service_status = queryServiceStatus();
+        int32_t release_ret = -1;
+        for (int attempt = 1; attempt <= max_release_attempts && service_status != 0; ++attempt)
         {
-            std::cout << "Try to deactivate the motion control-related service." << std::endl;
-            int32_t ret = msc->ReleaseMode(); 
-            if (ret == 0) {
+            std::cout << "Try to deactivate the motion control-related service (attempt "
+                      << attempt << " of " << max_release_attempts << ")." << std::endl;
+            release_ret = msc->ReleaseMode();
+            if (release_ret == 0) {
                 std::cout << "ReleaseMode succeeded." << std::endl;
             } else {
-                std::cout << "ReleaseMode failed. Error code: " << ret << std::endl;
+                std::cout << "ReleaseMode failed. Error code: " << release_ret << std::endl;
             }
-            sleep(5);
+            // Keep commanding while the service stops, instead of sleeping: idle motors cannot
+            // be re-energised from low level.
+            keepMotorsAlive(2.0);
+            service_status = queryServiceStatus();
         }
+
+        if (service_status == 0)
+        {
+            std::cout << "Motion control service released." << std::endl;
+        }
+        else if (service_status > 0)
+        {
+            std::cerr << "Motion control service still running after " << max_release_attempts
+                      << " attempts: low-level commands will be ignored. Release it from the "
+                         "remote or power-cycle the robot." << std::endl;
+        }
+        else if (release_ret == 0)
+        {
+            std::cerr << "ReleaseMode succeeded but CheckMode is not answering: could not confirm "
+                         "the motion control service is released." << std::endl;
+        }
+        else
+        {
+            std::cerr << "Could neither query nor release the motion control service after "
+                      << max_release_attempts << " attempts." << std::endl;
+        }
+        if (service_status == 0)
+        {
+            keepMotorsAlive(0.5);
+        }
+
         std::cout << "finished init" << std::endl;
 
     }
+    void LowLevelInterface::startKeepAlive()
+    {
+        if (keep_alive_running_.load()) return;
+        keep_alive_running_.store(true);
+        keep_alive_thread_ = std::thread([this]()
+        {
+            std::array<float, 60> zero_command = {0};
+            auto next = std::chrono::steady_clock::now();
+            while (keep_alive_running_.load())
+            {
+                SendCommand(zero_command);
+                next += std::chrono::milliseconds(2);
+                std::this_thread::sleep_until(next);
+            }
+        });
+    }
+
+    void LowLevelInterface::stopKeepAlive()
+    {
+        if (!keep_alive_running_.exchange(false)) return;
+        if (keep_alive_thread_.joinable()) keep_alive_thread_.join();
+    }
+
+    void LowLevelInterface::keepMotorsAlive(double seconds)
+    {
+        std::array<float, 60> zero_command = {0};
+        const auto period = std::chrono::milliseconds(2);
+        const auto deadline = std::chrono::steady_clock::now()
+                + std::chrono::milliseconds(static_cast<long>(seconds * 1000.0));
+        auto next = std::chrono::steady_clock::now();
+        while (std::chrono::steady_clock::now() < deadline)
+        {
+            SendCommand(zero_command);
+            next += period;
+            std::this_thread::sleep_until(next);
+        }
+    }
+
+    LowLevelInterface::~LowLevelInterface()
+    {
+        stopKeepAlive();
+    }
+
     void LowLevelInterface::InitLowCmd()
     {
         low_cmd.head()[0] = 0xFE;
@@ -72,28 +153,26 @@ namespace go2hal
         }
     }
 
+    /* 1 if a motion control (sport) service is running, 0 if none is, -1 if CheckMode failed.
+     * A failed CheckMode also leaves motionName empty, so it must not be read as "released". */
     int LowLevelInterface::queryServiceStatus()
     {
         std::string robotForm,motionName;
-        int motionStatus;
         int32_t ret = msc->CheckMode(robotForm,motionName);
-        if (ret == 0) {
-            std::cout << "CheckMode succeeded." << std::endl;
-        } else {
+        if (ret != 0)
+        {
             std::cout << "CheckMode failed. Error code: " << ret << std::endl;
+            return -1;
         }
+        std::cout << "CheckMode succeeded." << std::endl;
         if(motionName.empty())
         {
             std::cout << "The motion control-related service is deactivated." << std::endl;
-            motionStatus = 0;
+            return 0;
         }
-        else
-        {
-            std::string serviceName = queryServiceName(robotForm,motionName);
-            std::cout << "Service: "<< serviceName<< " is activate" << std::endl;
-            motionStatus = 1;
-        }
-        return motionStatus;
+        std::string serviceName = queryServiceName(robotForm,motionName);
+        std::cout << "Service: "<< serviceName<< " is activate" << std::endl;
+        return 1;
     }
 
     std::string LowLevelInterface::queryServiceName(std::string form,std::string name)
