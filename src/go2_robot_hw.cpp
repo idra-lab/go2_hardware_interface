@@ -205,7 +205,10 @@ void Go2RobotHw::read()
       remove_quaternion_[3] = sin(remove_euler_[2]/2); // z
       is_remove_yaw_set_ = true;
     }
-    if ( base_pub_counter%4 == 0)
+    // Publish the IMU on every cycle, as the Aliengo driver does. The RL controller averages the
+    // accelerometer over each policy step (imu_lin_acc_model "mean_specific_force") to keep motor
+    // and impact vibration from aliasing into the observation; republishing one sample in four
+    // would alias it before the average ever sees it.
     {
         imu_orientation_raw_[0] = static_cast<double>(imu.quaternion()[0]);  // w
         imu_orientation_raw_[1] = static_cast<double>(imu.quaternion()[1]);  // x
